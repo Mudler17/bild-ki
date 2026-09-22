@@ -1,0 +1,19 @@
+# Abhängigkeiten und Build
+node_modules
+dist
+dist-server
+
+# Geheimnisse – niemals committen
+.env
+.env.*
+!.env.example
+*.local
+
+# Logs und System
+logs
+*.log
+npm-debug.log*
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea

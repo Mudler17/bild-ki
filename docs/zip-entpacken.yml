@@ -1,0 +1,56 @@
+# Entpackt eine hochgeladene ZIP-Datei direkt im Repository (praktisch am iPad/ohne Terminal).
+# Ablage im Repo: .github/workflows/zip-entpacken.yml
+name: ZIP entpacken
+
+on:
+  push:
+    paths:
+      - '*.zip'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  entpacken:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: ZIP entpacken und committen
+        run: |
+          set -euo pipefail
+          shopt -s nullglob dotglob
+          zips=(*.zip)
+          if [ ${#zips[@]} -eq 0 ]; then
+            echo "Keine ZIP-Datei im Hauptverzeichnis gefunden."
+            exit 0
+          fi
+          for zip in "${zips[@]}"; do
+            tmp="$(mktemp -d)"
+            unzip -q -o "$zip" -d "$tmp"
+            rm -rf "$tmp/__MACOSX" "$tmp/.git"
+            entries=("$tmp"/*)
+            src="$tmp"
+            # Liegt alles in einem einzigen Ordner (z. B. bild-ki/), diesen Ordner als Wurzel nehmen
+            if [ ${#entries[@]} -eq 1 ] && [ -d "${entries[0]}" ]; then
+              src="${entries[0]}"
+            fi
+            rm -rf "$src/.git"
+            if [ -d "$src/.github/workflows" ]; then
+              echo "::warning::Workflow-Dateien aus dem ZIP werden übersprungen (GitHub erlaubt das dem Bot nicht)."
+              rm -rf "$src/.github/workflows"
+            fi
+            cp -a "$src"/. .
+            rm -f "$zip"
+            rm -rf "$tmp"
+          done
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Keine Änderungen."
+          else
+            git commit -m "ZIP-Inhalt entpackt"
+            git push
+          fi

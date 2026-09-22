@@ -1,0 +1,44 @@
+{
+  "name": "bild-ki",
+  "private": true,
+  "version": "2.0.0",
+  "description": "ArtArchive AI – digitales Kuratieren und kunstgeschichtliche Bildanalyse. Nachbau der AI-Studio-App „Bild-KI“: passwortgeschützt, OpenAI-Schlüssel nur auf dem Server.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "tsx watch --ignore ./src --ignore ./dist server/index.ts",
+    "build": "npm run build:client && npm run build:server",
+    "build:client": "vite build",
+    "build:server": "tsc -p tsconfig.server.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json --noEmit",
+    "start": "node dist-server/index.js",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.7.0",
+    "helmet": "^8.3.0",
+    "openai": "^7.21.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/typography": "^0.5.20",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/express": "^5.0.6",
+    "@types/node": "^22.19.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "idb-keyval": "^6.3.0",
+    "lucide-react": "^1.47.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0"
+  }
+}

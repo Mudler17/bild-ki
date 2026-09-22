@@ -1,0 +1,73 @@
+@import 'tailwindcss';
+@plugin '@tailwindcss/typography';
+
+/* Systemschriften – keine externen Fonts (offline-fähig, datensparsam) */
+@theme {
+  --font-serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, 'Times New Roman', serif;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  background-color: var(--color-slate-50);
+  color: var(--color-slate-900);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.scrollbar-hide {
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+@keyframes artarchive-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes artarchive-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.animate-fade-in {
+  animation: artarchive-fade-in 0.15s ease-out;
+}
+.animate-slide-up {
+  animation: artarchive-slide-up 0.2s ease-out;
+}
+
+/* Aktionen nur bei Maus-Hover ausblenden – auf Touch-Geräten bleiben sie sichtbar */
+@media (hover: hover) {
+  .reveal-on-hover {
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .group:hover .reveal-on-hover,
+  .reveal-on-hover:focus-visible,
+  .reveal-on-hover:focus-within {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
