@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Archive as ArchiveIcon, Loader2, RefreshCcw, WifiOff } from 'lucide-react';
 import { APP_NAME, APP_VERSION } from './config';
-import type { Artwork, AnalysisResult, FocusArea, Project, SessionInfo } from './types';
+import type { Artwork, AnalysisResult, FocusArea, Project, SessionInfo, WorkNote } from './types';
 import { AUTH_REQUIRED_EVENT, api } from './lib/api';
 import {
   exportBackup,
@@ -25,6 +25,8 @@ import { LoginScreen } from './components/LoginScreen';
 import { ConfirmModal, TextPromptModal, type ConfirmOptions } from './components/Modals';
 import { ProjectList } from './components/ProjectList';
 import { Gallery, ProjectHeader, type ProjectViewMode } from './components/ProjectView';
+import { ResearchWorkspace, type ResearchView, type PictureRef, type NoteSelection } from './components/ResearchWorkspace';
+import { putWorkNote, newWorkNote, type SearchHit } from './lib/research';
 import { ToastProvider, useToast } from './components/Toasts';
 
 export default function App() {
@@ -169,6 +171,11 @@ type PromptState = { kind: 'create' } | { kind: 'rename'; project: Project };
 
 function ArchiveApp({ session, onLogout, onRetryConnection }: { session: SessionInfo; onLogout: () => Promise<void>; onRetryConnection: () => void }) {
   const toast = useToast();
+  const [researchView, setResearchView] = useState<ResearchView>('archive');
+  const [comparisonPair, setComparisonPair] = useState<PictureRef[]>([]);
+  const [noteSelection, setNoteSelection] = useState<NoteSelection>(null);
+  const [wikiTarget, setWikiTarget] = useState<string | null>(null);
+  const [artworkInitialTab, setArtworkInitialTab] = useState<'info' | 'description' | 'analysis' | 'catalog' | 'details'>('info');
   const [projects, renderProjects] = useState<Project[] | null>(null);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>({ kind: 'loading', message: 'Archiv wird geladen …' });
   const [syncNotice, setSyncNotice] = useState('');
@@ -321,6 +328,26 @@ function ArchiveApp({ session, onLogout, onRetryConnection }: { session: Session
     if (projects && currentProjectId && !currentProject) setCurrentProjectId(null);
   }, [projects, currentProjectId, currentProject]);
 
+  const saveNote = (owner: string | null, note: WorkNote): string | null => {
+    try {
+      const next = putWorkNote(projectsRef.current ?? [], owner, note);
+      const target = next.find(p => p.workNotes?.includes(note));
+      setProjects(next);
+      return target?.id ?? null;
+    } catch (error) { toast.error(errorMessage(error, 'Notiz konnte nicht gespeichert werden.')); return null; }
+  };
+  const createContextNote = (projectId: string, artworkId?: string) => {
+    const note = newWorkNote({ artworkIds: artworkId ? [artworkId] : [] });
+    const owner = saveNote(projectId, note);
+    if (owner) { setNoteSelection({ projectId: owner, noteId: note.id }); setSelectedArtworkId(null); setResearchView('notes'); }
+  };
+  const openHit = (hit: SearchHit) => {
+    if (hit.note) { setNoteSelection({ projectId: hit.project.id, noteId: hit.note.id }); setResearchView('notes'); return; }
+    setCurrentProjectId(hit.project.id); setWikiTarget(hit.wikiId ?? null);
+    setView(hit.wikiId ? 'wiki' : 'gallery');
+    setArtworkInitialTab(hit.tab ?? 'info'); setSelectedArtworkId(hit.artwork?.id ?? null); setResearchView('archive');
+  };
+
   const createProject = (name: string) => {
     const now = Date.now();
     const project: Project = {
@@ -343,7 +370,7 @@ function ArchiveApp({ session, onLogout, onRetryConnection }: { session: Session
   const deleteProject = (project: Project) =>
     setConfirm({
       title: 'Projekt löschen?',
-      message: `„${project.name}“ mit ${project.artworks.length} Werken und allen Wiki-Artikeln wird dauerhaft gelöscht.\nTipp: Vorher ein Backup exportieren.`,
+      message: `„${project.name}“ mit ${project.artworks.length} Werken, allen Wiki-Artikeln und zugeordneten Notizen wird dauerhaft gelöscht.\nTipp: Vorher ein Backup exportieren.`,
       action: () => setProjects((previous) => (previous ?? []).filter((item) => item.id !== project.id)),
     });
 
@@ -484,9 +511,29 @@ function ArchiveApp({ session, onLogout, onRetryConnection }: { session: Session
         </div>
       )}
 
+      <nav aria-label="Arbeitsbereiche" className="flex flex-wrap items-center gap-2 border-b bg-white px-3 py-3 sm:px-8">
+        {([['archive', 'Sammlung'], ['search', 'Suche'], ['compare', `Bildvergleich (${comparisonPair.length}/2)`], ['notes', 'Notizen & Aufgaben']] as const).map(([id, label]) => <button key={id} aria-current={researchView === id ? 'page' : undefined} onClick={() => setResearchView(id)} className={`rounded-lg px-3 py-2 text-sm font-semibold ${researchView === id ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700'}`}>{label}</button>)}
+        {currentProject && <button className="rounded-lg border px-3 py-2 text-sm" onClick={() => createContextNote(currentProject.id)}>Notiz zu diesem Projekt</button>}
+      </nav>
+      <ResearchWorkspace projects={projects} view={researchView} setView={setResearchView} pair={comparisonPair} setPair={setComparisonPair}
+        selectedNote={noteSelection} setSelectedNote={setNoteSelection} onOpen={openHit} onSave={saveNote}
+        aiAvailable={Boolean(session.aiAvailable) && !session.offline}
+        onMove={(projectId, noteId, destination) => {
+          const list = projectsRef.current ?? [];
+          const note = list.find(p => p.id === projectId)?.workNotes?.find(n => n.id === noteId);
+          if (!note) return;
+          try {
+            const moved = { ...note, artworkIds: [], updatedAt: Date.now() };
+            const next = putWorkNote(list.map(p => p.id === projectId ? { ...p, workNotes: (p.workNotes ?? []).filter(n => n.id !== noteId), updatedAt: Date.now() } : p), destination, moved);
+            const owner = next.find(p => p.workNotes?.includes(moved));
+            setProjects(next); if (owner) setNoteSelection({ projectId: owner.id, noteId });
+          } catch (error) { toast.error(errorMessage(error, 'Zuordnung fehlgeschlagen.')); }
+        }}
+        onDelete={(projectId, noteId) => setConfirm({ title: 'Notiz löschen?', message: 'Diese Notiz wird auf allen Geräten gelöscht.', action: () => { mutateProject(projectId, p => ({ ...p, workNotes: (p.workNotes ?? []).filter(n => n.id !== noteId) })); setNoteSelection(null); } })} />
+      <div hidden={researchView !== 'archive'}>
       {!currentProject ? (
         <ProjectList
-          projects={projects}
+          projects={projects.filter(p => p.kind !== 'notebook')}
           onOpen={(projectId) => {
             setCurrentProjectId(projectId);
             setView('gallery');
@@ -513,11 +560,12 @@ function ArchiveApp({ session, onLogout, onRetryConnection }: { session: Session
           />
           <main className="flex-1">
             {view === 'gallery' ? (
-              <Gallery project={currentProject} analyzingIds={analyzingIds} onSelect={setSelectedArtworkId} onUpload={(files) => void uploadImages(files)} />
+              <Gallery project={currentProject} analyzingIds={analyzingIds} onSelect={id => { setArtworkInitialTab('info'); setSelectedArtworkId(id); }} onUpload={(files) => void uploadImages(files)} />
             ) : (
               <div className="p-3 sm:p-8">
                 <ContextWiki
-                  key={currentProject.id}
+                  key={`${currentProject.id}/${wikiTarget ?? ""}`}
+                  initialEntryId={wikiTarget}
                   project={currentProject}
                   onMutate={(updater) => mutateProject(currentProject.id, updater)}
                   onOpenArtwork={setSelectedArtworkId}
@@ -529,9 +577,21 @@ function ArchiveApp({ session, onLogout, onRetryConnection }: { session: Session
         </div>
       )}
 
+      </div>
       {currentProject && selectedArtwork && (
+
         <ArtworkDetailModal
           key={selectedArtwork.id}
+          initialTab={artworkInitialTab}
+          onCreateNote={() => createContextNote(currentProject.id, selectedArtwork.id)}
+          onCompare={() => {
+            const ref = { projectId: currentProject.id, artworkId: selectedArtwork.id };
+            if (!comparisonPair.some(r => r.projectId === ref.projectId && r.artworkId === ref.artworkId)) {
+              if (comparisonPair.length >= 2) { toast.error('Schon zwei Bilder ausgewählt. Entferne im Bildvergleich zuerst eines.'); return; }
+              setComparisonPair([...comparisonPair, ref]);
+            }
+            setSelectedArtworkId(null); setResearchView('compare');
+          }}
           artwork={selectedArtwork}
           project={currentProject}
           aiAvailable={Boolean(session.aiAvailable) && !session.offline}
@@ -551,7 +611,7 @@ function ArchiveApp({ session, onLogout, onRetryConnection }: { session: Session
       {isBackupOpen && (
         <BackupModal
           session={session}
-          projectCount={projects.length}
+          projectCount={projects.filter(p => p.kind !== 'notebook').length}
           artworkCount={artworkCount}
           folderStatus={folder.status}
           folderName={folder.handle?.name}

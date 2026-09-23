@@ -17,6 +17,14 @@ export function validateProject(value: unknown, id: string): Project {
       typeof value.description !== 'string' || typeof value.historicalContext !== 'string') {
     throw new ProjectError(400, 'INVALID_PROJECT', 'Ungültige Projektdaten.');
   }
+  if (value.workNotes !== undefined && (!Array.isArray(value.workNotes) || !value.workNotes.every(n =>
+      record(n) && typeof n.id === 'string' && typeof n.title === 'string' && typeof n.content === 'string' &&
+      ['draft', 'note', 'task'].includes(String(n.kind)) && typeof n.done === 'boolean' && typeof n.due === 'string' &&
+      Array.isArray(n.artworkIds) && n.artworkIds.every(id => typeof id === 'string') &&
+      ['user', 'ai'].includes(String(n.source)) && typeof n.createdAt === 'number' && typeof n.updatedAt === 'number' &&
+      (n.comparison === undefined || (Array.isArray(n.comparison) && n.comparison.length <= 2 && n.comparison.every(r => record(r) && typeof r.projectId === 'string' && typeof r.artworkId === 'string' && typeof r.title === 'string')))))) {
+    throw new ProjectError(400, 'INVALID_PROJECT', 'Ungültige Notizen.');
+  }
   // No external URLs or SVG/HTML payloads, including nested detail images.
   const checkImages = (item: unknown, depth = 0): void => {
     if (depth > 30) throw new ProjectError(400, 'INVALID_PROJECT', 'Projektdaten sind zu tief verschachtelt.');

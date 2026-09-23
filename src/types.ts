@@ -66,7 +66,24 @@ export interface WikiFolder {
   parentId?: string;
 }
 
+export interface WorkNote {
+  id: string;
+  title: string;
+  content: string;
+  kind: 'draft' | 'note' | 'task';
+  done: boolean;
+  due: string;
+  artworkIds: string[];
+  comparison?: { projectId: string; artworkId: string; title: string }[];
+  source: 'user' | 'ai';
+  model?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface Project {
+  kind?: 'notebook';
+  workNotes?: WorkNote[];
   id: string;
   name: string;
   description: string;

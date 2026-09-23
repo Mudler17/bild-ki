@@ -1,4 +1,4 @@
-import type { Artwork, DetailView, FormalAnalysis, Project, WikiEntry, WikiFolder } from '../types';
+import type { WorkNote, Artwork, DetailView, FormalAnalysis, Project, WikiEntry, WikiFolder } from '../types';
 import { generateId, isRecord } from './util';
 
 /**
@@ -105,6 +105,19 @@ function wikiFolder(value: unknown): WikiFolder | null {
   };
 }
 
+function workNote(value: unknown): WorkNote | null {
+  if (!isRecord(value)) return null;
+  return {
+    id: text(value.id) || generateId(), title: text(value.title), content: text(value.content),
+    kind: value.kind === 'task' || value.kind === 'note' ? value.kind : 'draft',
+    done: value.done === true, due: /^\d{4}-\d{2}-\d{2}$/.test(text(value.due)) ? text(value.due) : '',
+    artworkIds: textList(value.artworkIds), source: value.source === 'ai' ? 'ai' : 'user',
+    ...(typeof value.model === 'string' ? { model: value.model } : {}),
+    ...(Array.isArray(value.comparison) ? { comparison: value.comparison.filter(isRecord).map(r => ({ projectId: text(r.projectId), artworkId: text(r.artworkId), title: text(r.title) })).slice(0, 2) } : {}),
+    createdAt: timestamp(value.createdAt, Date.now()), updatedAt: timestamp(value.updatedAt, Date.now()),
+  };
+}
+
 export interface NormalizeReport {
   projects: Project[];
   skippedArtworks: number;
@@ -132,6 +145,8 @@ export function normalizeProject(value: unknown, report?: { skippedArtworks: num
     createdAt: timestamp(value.createdAt, Date.now()),
     artworks,
     historicalContext: text(value.historicalContext),
+    ...(value.kind === 'notebook' ? { kind: 'notebook' as const } : {}),
+    ...(Array.isArray(value.workNotes) ? { workNotes: value.workNotes.map(workNote).filter((n): n is WorkNote => n !== null) } : {}),
     wikiEntries: entries,
     wikiFolders: folders.map((folder) =>
       folder.parentId && !folderIds.has(folder.parentId) ? { ...folder, parentId: undefined } : folder,

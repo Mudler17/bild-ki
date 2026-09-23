@@ -207,3 +207,17 @@ test('Server CAS accepts only one conflicting writer, validates images and survi
   await writeFile(join(directory, 'broken.json'), '{broken');
   await assert.rejects(new ProjectStore(directory).open());
 });
+
+
+test('App notes and comparison tasks synchronize to second device and keep conflicting edits', async t => {
+  const { device } = await setup(t);
+  const notebook = { ...project('notes', 'App-Notizen'), kind: 'notebook', artworks: [], workNotes: [{ id: 'n', title: 'Licht prüfen', content: 'Entwurf', kind: 'task', done: false, due: '2026-10-01', source: 'user', artworkIds: [], createdAt: 1, updatedAt: 1, comparison: [{ projectId: 'p', artworkId: 'a', title: 'Werk' }] }] };
+  const a = await device([notebook]); const b = await device();
+  assert.deepEqual(b.projects[0].workNotes, notebook.workNotes);
+  a.engine.edit(ps => ps.map(p => ({ ...p, workNotes: p.workNotes.map(n => ({ ...n, content: 'Gerät A' })) })));
+  b.engine.edit(ps => ps.map(p => ({ ...p, workNotes: p.workNotes.map(n => ({ ...n, content: 'Gerät B' })) })));
+  await a.engine.sync(); await b.engine.sync(); await a.engine.sync();
+  assert.ok(a.projects.some(p => p.workNotes?.[0].content === 'Gerät A'));
+  assert.ok(a.projects.some(p => p.workNotes?.[0].content === 'Gerät B'));
+  assert.ok(a.projects.every(p => p.kind === 'notebook'));
+});

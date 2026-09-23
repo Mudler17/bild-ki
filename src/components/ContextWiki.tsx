@@ -72,11 +72,13 @@ function ConnectionsPanel({
 }
 
 export function ContextWiki({
+  initialEntryId,
   project,
   onMutate,
   onOpenArtwork,
   aiAvailable,
 }: {
+  initialEntryId?: string | null;
   project: Project;
   onMutate: (updater: (project: Project) => Project) => void;
   onOpenArtwork: (artworkId: string) => void;
@@ -86,7 +88,7 @@ export function ContextWiki({
   const entries = useMemo(() => project.wikiEntries ?? [], [project.wikiEntries]);
   const folders = useMemo(() => project.wikiFolders ?? [], [project.wikiFolders]);
 
-  const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
+  const [selectedEntryId, setSelectedEntryId] = useState<string | null>(initialEntryId ?? null);
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState('');
   const [editContent, setEditContent] = useState('');
@@ -99,7 +101,7 @@ export function ContextWiki({
   const [aiTopic, setAiTopic] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [confirm, setConfirm] = useState<ConfirmOptions | null>(null);
-  const [mobilePane, setMobilePane] = useState<'list' | 'article'>('list');
+  const [mobilePane, setMobilePane] = useState<'list' | 'article'>(initialEntryId ? 'article' : 'list');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 

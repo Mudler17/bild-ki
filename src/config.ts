@@ -2,6 +2,6 @@
 export const APP_NAME = 'ArtArchive AI';
 export const APP_SHORT_NAME = 'ArtArchive';
 export const APP_TAGLINE = 'Digitales Kuratieren & Kunstgeschichtliche Analyse';
-export const APP_VERSION = '2.1.0';
+export const APP_VERSION = '2.2.0';
 /** Version der AI-Studio-Vorlage „Bild-KI“, die hier nachgebaut wurde. */
 export const ORIGINAL_VERSION = 'v1.9.5';
