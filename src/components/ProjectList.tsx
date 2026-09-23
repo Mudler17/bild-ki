@@ -47,7 +47,8 @@ export function ProjectList({
                   </div>
                   <ChevronRight size={20} className="text-slate-300 group-hover:text-slate-900" />
                 </div>
-                <h3 className="truncate pr-16 text-lg font-bold text-slate-900">{project.name}</h3>
+                <h3 title={project.name} className="truncate pr-16 text-lg font-bold text-slate-900">{project.name}</h3>
+                {project.name.endsWith(' (Konfliktkopie)') && <p className="mt-1 text-xs font-medium text-amber-800">Konfliktkopie – Fassungen prüfen</p>}
                 <p className="mt-1 text-sm text-slate-500">
                   {project.artworks.length} {project.artworks.length === 1 ? 'Kunstwerk' : 'Kunstwerke'} · {(project.wikiEntries ?? []).length} Wiki-Artikel
                 </p>
@@ -82,7 +83,7 @@ export function ProjectList({
         </div>
 
         <p className="mt-10 text-center text-[11px] text-slate-400">
-          v{APP_VERSION} · Nachbau der AI-Studio-App „Bild-KI“ ({ORIGINAL_VERSION}) · Daten bleiben lokal auf diesem Gerät
+          v{APP_VERSION} · Nachbau der AI-Studio-App „Bild-KI“ ({ORIGINAL_VERSION}) · Persönliches Archiv · auf deinen Geräten verfügbar
         </p>
       </div>
     </div>

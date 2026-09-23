@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 /**
  * Vertragstest: Stellt der Server die OpenAI-Anfragen korrekt (Responses API, Structured Outputs,
  * Bild als Data-URL, store=false) und verarbeitet er Antworten/Fehler richtig?
@@ -7,6 +10,8 @@
 import http from 'node:http';
 import { spawn } from 'node:child_process';
 import { after, before, describe, test } from 'node:test';
+const projectTestDir = mkdtempSync(join(tmpdir(), 'bild-ki-api-'));
+after(() => rmSync(projectTestDir, { recursive: true, force: true }));
 import assert from 'node:assert/strict';
 
 const MOCK_PORT = 4100 + Math.floor(Math.random() * 90);
@@ -102,7 +107,7 @@ const mock = http.createServer((req, res) => {
 function startApp(port, env) {
   return spawn(process.execPath, ['dist-server/index.js'], {
     env: {
-      ...process.env,
+      ...process.env, DATA_DIR: join(projectTestDir, String(port)),
       NODE_ENV: 'production',
       HOST: '127.0.0.1',
       PORT: String(port),

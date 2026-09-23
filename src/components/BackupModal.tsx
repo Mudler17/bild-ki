@@ -94,13 +94,14 @@ export function BackupModal({
   return (
     <ModalFrame title="Speichern & Synchronisieren" icon={<Save size={20} />} onClose={onClose}>
       <div className="space-y-8 p-6">
+        <p className="rounded-lg bg-blue-50 p-3 text-sm text-blue-900">Dein persönliches Archiv wird mit dem Server abgeglichen. Melde dich auf deinen anderen Geräten mit demselben Passwort unter derselben Adresse an. Vor dem Gerätewechsel oben auf „Auf dem Server gespeichert“ achten. JSON-Export und Ordner-Sicherung bleiben zusätzliche Sicherungen.</p>
         {/* Ordner-Synchronisation */}
         <section>
           <div className="mb-2 flex items-center gap-2">
             <div className={`rounded-full p-2 ${folderStatus === 'granted' ? 'bg-green-100 text-green-600' : 'bg-blue-50 text-blue-600'}`}>
               {folderStatus === 'granted' ? <Check size={20} /> : <FolderOpen size={20} />}
             </div>
-            <h4 className="font-bold text-gray-800">Ordner-Synchronisation</h4>
+            <h4 className="font-bold text-gray-800">Zusätzliche Ordner-Sicherung</h4>
           </div>
           <p className="mb-4 pl-11 text-sm text-gray-600">Daten automatisch als Backup-Datei in einem lokalen Ordner speichern.</p>
           <div className="space-y-3 pl-11">
