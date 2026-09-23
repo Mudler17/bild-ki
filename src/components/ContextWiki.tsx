@@ -10,6 +10,7 @@ import {
   Folder,
   FolderOpen,
   FolderPlus,
+  FolderInput,
   Image as ImageIcon,
   Link as LinkIcon,
   Loader2,
@@ -26,6 +27,9 @@ import { byTitle, errorMessage, formatDateTime, generateId } from '../lib/util';
 import { findLinkSuggestions, linkFirstOccurrence } from '../lib/wiki';
 import { ConfirmModal, useEscape, type ConfirmOptions } from './Modals';
 import { useToast } from './Toasts';
+import { WikiDiscussion } from './WikiDiscussion';
+import { WikiMoveDialog } from './WikiMoveDialog';
+import { folderPath, moveWikiItem, type WikiMoveTarget } from '../lib/wiki-structure';
 import { WikiContent } from './WikiContent';
 
 function ConnectionsPanel({
@@ -88,6 +92,8 @@ export function ContextWiki({
   const entries = useMemo(() => project.wikiEntries ?? [], [project.wikiEntries]);
   const folders = useMemo(() => project.wikiFolders ?? [], [project.wikiFolders]);
 
+  const [moveTarget, setMoveTarget] = useState<WikiMoveTarget | null>(null);
+  const discussionRef = useRef<HTMLDivElement>(null);
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(initialEntryId ?? null);
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState('');
@@ -212,7 +218,7 @@ export function ContextWiki({
   const askDeleteEntry = (id: string) =>
     setConfirm({
       title: 'Artikel löschen?',
-      message: 'Der Artikel wird endgültig entfernt.',
+      message: 'Der Artikel wird mit seiner Diskussion und dem Diskussionsentwurf endgültig entfernt.',
       action: () => {
         onMutate((current) => ({ ...current, wikiEntries: (current.wikiEntries ?? []).filter((entry) => entry.id !== id) }));
         if (selectedEntry?.id === id) {
@@ -283,7 +289,6 @@ export function ContextWiki({
     return (
       <div
         key={entry.id}
-        onClick={() => selectEntry(entry.id)}
         className={`group flex cursor-pointer justify-between rounded px-2 py-1.5 text-sm ${
           active
             ? inFolder
@@ -292,9 +297,10 @@ export function ContextWiki({
             : 'text-gray-600 hover:bg-gray-100'
         }`}
       >
-        <span className="truncate">{entry.title}</span>
+        <button onClick={() => selectEntry(entry.id)} className="min-w-0 flex-1 truncate text-left" title={entry.title}>{entry.title}</button>
         <div className="flex shrink-0 items-center gap-1">
-          {entry.source === 'ai' && <Sparkles size={10} className="text-purple-400" />}
+          <button onClick={() => { commitEdits(); setMoveTarget({ kind: 'article', id: entry.id }); }} className="rounded p-1 hover:bg-blue-100" title="Artikel verschieben" aria-label={`${entry.title} verschieben`}><FolderInput size={14} /></button>
+          {entry.source === 'ai'  && <Sparkles size={10} className="text-purple-400" />}
           <button
             onClick={(event) => {
               event.stopPropagation();
@@ -341,15 +347,15 @@ export function ContextWiki({
         return (
           <div key={folder.id} className="mb-1">
             <div
-              onClick={() => setExpandedFolders((previous) => ({ ...previous, [folder.id]: !isOpen }))}
               className="group flex cursor-pointer items-center justify-between rounded px-2 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
             >
-              <div className="flex items-center gap-2 truncate">
+              <button onClick={() => setExpandedFolders(previous => ({ ...previous, [folder.id]: !isOpen }))} aria-expanded={isOpen} className="flex min-w-0 flex-1 items-center gap-2 truncate text-left">
                 {isOpen ? <ChevronDown size={14} className="text-gray-400" /> : <ChevronRight size={14} />}
                 {isOpen ? <FolderOpen size={14} className="text-blue-500" /> : <Folder size={14} className="text-blue-500" />}
                 <span className="truncate">{folder.name}</span>
-              </div>
-              <div className="reveal-on-hover flex items-center rounded bg-gray-100 px-1">
+              </button>
+              <div className="flex shrink-0 items-center rounded bg-gray-100 px-1">
+                <button onClick={() => { commitEdits(); setMoveTarget({ kind: 'folder', id: folder.id }); }} className="p-1 hover:text-blue-600" title="Ordner verschieben" aria-label={`Ordner ${folder.name} verschieben`}><FolderInput size={14} /></button>
                 <button
                   onClick={(event) => {
                     event.stopPropagation();
@@ -401,7 +407,7 @@ export function ContextWiki({
   return (
     <div className="relative flex h-[calc(100dvh-150px)] min-h-[420px] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm md:h-[calc(100dvh-140px)]">
       {/* Seitenleiste */}
-      <aside className={`${mobilePane === 'article' ? 'hidden md:flex' : 'flex'} w-full flex-col border-r border-gray-100 bg-gray-50 md:w-72`}>
+      <aside className={`${mobilePane === 'article' ? 'hidden md:flex' : 'flex'} w-full shrink-0 flex-col border-r border-gray-100 bg-gray-50 md:w-72`}>
         <div className="flex items-center justify-between border-b bg-white p-4">
           <h3 className="flex gap-2 font-bold text-gray-700">
             <BookOpen size={16} /> Wiki
@@ -446,16 +452,17 @@ export function ContextWiki({
       <section className={`${mobilePane === 'list' ? 'hidden md:flex' : 'flex'} min-w-0 flex-1 flex-col bg-white`}>
         {selectedEntry ? (
           <>
-            <div className="flex min-h-16 shrink-0 items-center justify-between gap-3 border-b bg-white px-4 py-3 md:px-8">
+            <div className="flex min-h-16 shrink-0 flex-wrap items-center justify-between gap-3 border-b bg-white px-4 py-3 md:px-8">
               <button onClick={() => { commitEdits(); setMobilePane('list'); }} className="rounded-full p-1.5 text-gray-500 hover:bg-gray-100 md:hidden" aria-label="Zur Artikelliste">
                 <ArrowLeft size={18} />
               </button>
               {isEditing ? (
-                <input value={editTitle} onChange={(event) => setEditTitle(event.target.value)} className="w-full text-xl font-bold outline-none md:text-2xl" aria-label="Artikeltitel" />
+                <input value={editTitle} onChange={(event) => setEditTitle(event.target.value)} className="min-w-0 flex-1 text-xl font-bold outline-none md:text-2xl" aria-label="Artikeltitel" />
               ) : (
-                <h2 className="truncate font-serif text-xl font-bold md:text-2xl">{selectedEntry.title}</h2>
+                <h2 className="min-w-0 flex-1 break-words font-serif text-xl font-bold md:text-2xl">{selectedEntry.title}</h2>
               )}
-              <div className="flex shrink-0 items-center gap-2">
+              <div className="flex w-full shrink-0 flex-wrap items-center justify-end gap-2 sm:w-auto">
+                {!isEditing && <button onClick={() => setMoveTarget({ kind: 'article', id: selectedEntry.id })} className="rounded-lg border p-2 hover:bg-gray-50" aria-label="Aktuellen Artikel verschieben" title="Artikel verschieben"><FolderInput size={18} /></button>}
                 {isEditing && (
                   <button
                     onClick={() => {
@@ -485,6 +492,11 @@ export function ContextWiki({
               </div>
             </div>
             <div className="flex-1 overflow-y-auto bg-white p-4 md:p-8">
+              <header className="mx-auto mb-6 max-w-3xl space-y-2 border-b border-slate-100 pb-4 text-xs text-slate-500">
+                <p className="break-words">{selectedEntry.folderId ? folderPath(folders, selectedEntry.folderId) : 'Unsortiert'}{selectedEntry.source === 'ai' ? ' · KI-generierter Artikel' : ''}</p>
+                <p>Erstellt: <time dateTime={new Date(selectedEntry.createdAt).toISOString()}>{formatDateTime(selectedEntry.createdAt)}</time> · Zuletzt geändert: {formatDateTime(selectedEntry.updatedAt)}</p>
+                {!isEditing && <a className="inline-block rounded-lg border px-3 py-2 text-sm font-medium text-blue-700" href={`#discussion-${selectedEntry.id}`} onClick={event => { event.preventDefault(); const section = discussionRef.current?.querySelector('section'); section?.scrollIntoView({ block: 'start' }); section?.focus({ preventScroll: true }); }}>Diskussion ({selectedEntry.discussion?.length ?? 0})</a>}
+              </header>
               {isEditing ? (
                 <div className="flex h-full flex-col gap-4">
                   <div className="flex flex-wrap items-center gap-3 rounded-lg border border-gray-100 bg-gray-50 p-2">
@@ -526,7 +538,9 @@ export function ContextWiki({
                         ))}
                     </select>
                   </div>
+                  <p className="text-xs text-slate-500">Überschriften wie „## Abschnitt“ und „### Unterabschnitt“ bilden automatisch das verlinkte Inhaltsverzeichnis.</p>
                   <textarea
+                    aria-label="Artikelinhalt"
                     ref={textareaRef}
                     value={editContent}
                     onChange={(event) => setEditContent(event.target.value)}
@@ -541,6 +555,12 @@ export function ContextWiki({
                   ) : (
                     <p className="mx-auto max-w-3xl text-sm text-gray-400">Noch kein Inhalt. Über „Bearbeiten“ Text ergänzen.</p>
                   )}
+                  <div ref={discussionRef}>
+                    <WikiDiscussion key={selectedEntry.id} entry={selectedEntry} sectionId={`discussion-${selectedEntry.id}`} onChange={updater => {
+                      const id = selectedEntry.id;
+                      onMutate(current => ({ ...current, wikiEntries: (current.wikiEntries ?? []).map(entry => entry.id === id ? updater(entry) : entry) }));
+                    }} />
+                  </div>
                   <ConnectionsPanel
                     entry={selectedEntry}
                     entries={entries}
@@ -601,6 +621,14 @@ export function ContextWiki({
           </form>
         </div>
       )}
+      {moveTarget && <WikiMoveDialog project={project} target={moveTarget} onClose={() => setMoveTarget(null)} onMove={destination => {
+        try {
+          onMutate(current => moveWikiItem(current, moveTarget, destination));
+          setExpandedFolders(Object.fromEntries(folders.map(folder => [folder.id, true])));
+          setMoveTarget(null);
+          toast.success('Verschoben.');
+        } catch (error) { toast.error(errorMessage(error, 'Verschieben fehlgeschlagen.')); }
+      }} />}
       {confirm && <ConfirmModal {...confirm} onClose={() => setConfirm(null)} />}
     </div>
   );

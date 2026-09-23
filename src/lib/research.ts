@@ -37,7 +37,7 @@ export function searchArchive(projects: Project[], filters: SearchFilters): Sear
       if (matches(text)) hits.push({ project, note, title: note.title || 'Ohne Titel', text, field: note.kind === 'task' ? 'Aufgabe' : 'Notiz' });
     }
     if (!artworkFilter && (!filters.type || filters.type === 'wiki')) for (const entry of project.wikiEntries ?? []) {
-      const text = `${entry.title} ${entry.content}`;
+      const text = [entry.title, entry.content, entry.discussionDraft, ...(entry.discussion ?? []).map(post => post.content)].join(' ');
       if (matches(text)) hits.push({ project, wikiId: entry.id, title: entry.title, text, field: 'Wiki' });
     }
   }

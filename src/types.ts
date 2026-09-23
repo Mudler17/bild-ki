@@ -50,7 +50,16 @@ export interface Artwork {
   analysisModel?: string;
 }
 
+export interface WikiDiscussionPost {
+  id: string;
+  content: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface WikiEntry {
+  discussion?: WikiDiscussionPost[];
+  discussionDraft?: string;
   id: string;
   folderId?: string;
   title: string;

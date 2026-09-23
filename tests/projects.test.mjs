@@ -221,3 +221,18 @@ test('App notes and comparison tasks synchronize to second device and keep confl
   assert.ok(a.projects.some(p => p.workNotes?.[0].content === 'Gerät B'));
   assert.ok(a.projects.every(p => p.kind === 'notebook'));
 });
+
+test('Wiki folder moves, discussion and unpublished draft survive second-device sync and restart', async t => {
+  const { device } = await setup(t);
+  const p = project(); p.wikiFolders = [{id:'f',name:'Ordner'},{id:'sub',name:'Unterordner',parentId:'f'}];
+  p.wikiEntries[0] = {...p.wikiEntries[0],folderId:'sub',discussionDraft:'Noch prüfen',discussion:[{id:'d',content:'Datierung?',createdAt:20,updatedAt:20}]};
+  const a = await device([p]); const b = await device();
+  assert.deepEqual(b.projects[0].wikiEntries,p.wikiEntries);
+  b.engine.edit(ps=>ps.map(p=>({...p,wikiFolders:p.wikiFolders.map(f=>f.id==='sub'?{...f,parentId:undefined}:f),wikiEntries:p.wikiEntries.map(e=>({...e,discussionDraft:'',discussion:[...e.discussion,{id:'d2',content:'Geprüft',createdAt:30,updatedAt:30}]}))})));
+  await b.engine.sync(); await a.engine.sync();
+  assert.equal(a.projects[0].wikiFolders[1].parentId,undefined);
+  assert.equal(a.projects[0].wikiEntries[0].discussion.length,2);
+  assert.equal(a.projects[0].wikiEntries[0].createdAt,p.wikiEntries[0].createdAt);
+  const restarted = await device([], {cache:b.cache});
+  assert.deepEqual(JSON.parse(JSON.stringify(restarted.projects)),JSON.parse(JSON.stringify(a.projects)));
+});
