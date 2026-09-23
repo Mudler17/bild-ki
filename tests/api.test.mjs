@@ -111,6 +111,7 @@ describe('API', () => {
     assert.equal(response.status, 401);
     assert.equal((await response.json()).code, 'AUTH_REQUIRED');
     assert.equal((await post('/api/wiki', { topic: 'Test' })).status, 401);
+    assert.equal((await post('/api/compare', { images: [TINY_JPEG, TINY_JPEG] })).status, 401);
   });
 
   test('Große Anfragen: ohne Anmeldung 401, Login-Körper begrenzt', async () => {

@@ -196,3 +196,16 @@ tests/             API- und OpenAI-Vertragstests
 docs/ANALYSE.md    Analyse des Originals und Änderungsliste
 Dockerfile         Produktions-Image für Coolify
 ```
+
+
+## Recherche, Bildvergleich und Arbeitsnotizen (2.2.0)
+
+Die Navigation enthält **Sammlung**, **Suche**, **Bildvergleich** und **Notizen & Aufgaben**.
+
+- Die Suche berücksichtigt mehrere Suchwörter gemeinsam und durchsucht Werkdaten, Beschreibungen, Analysen, Projekte, Wiki und neue Notizen. Projekt und Trefferart sind filterbar; Künstler, Epoche/Stil und Schlagwörter filtern die vorhandenen Bildangaben. Keine automatische Ergänzung fehlender Metadaten. Maximal 150 Treffer werden angezeigt; mit Filtern eingrenzen. Wiki-Treffer öffnen den Artikel, Bildtreffer nach Möglichkeit den passenden Reiter.
+- Zwei Bilder lassen sich projektübergreifend gegenüberstellen, auch auf dem Smartphone nebeneinander. Die Vergleichstabelle zeigt vorhandene Angaben zu Motiv, Komposition, Farbe, Licht und Technik. Eigene Vergleichsnotizen lassen sich unmittelbar anlegen und in Aufgaben umwandeln.
+- **KI-Vergleich starten** sendet ausdrücklich beide Bilder an das bereits konfigurierte Bildmodell. Der Endpunkt `/api/compare` nutzt dieselbe Anmeldung, Herkunftsprüfung, KI-Raten-/Tageslimits, Abbruchbehandlung und `store: false` wie die Bildanalyse. Das Ergebnis wird als gekennzeichnete KI-Notiz mit Modellangabe und Bildverweisen gespeichert. Die technische Eingabe folgt der [offiziellen Dokumentation zu mehreren Bildeingaben](https://developers.openai.com/api/docs/guides/images-vision). Tests verwenden lokale Mocks, keine kostenpflichtigen KI-Aufrufe.
+- Notizen haben die Form **Vorläufige Notiz**, **Notiz** oder **Aufgabe**. Aufgaben können eine Fälligkeit und einen Erledigt-Status erhalten; es gibt keine Benachrichtigungen. Änderungen werden automatisch gespeichert. Die Zuordnung zu App, Projekt und Bild kann geändert werden; beim Wechsel des Projekts wird der bisherige einzelne Bildbezug entfernt. Bildverweise in Vergleichen bleiben erhalten und kennzeichnen gelöschte Quellen.
+- Appweite Notizen und Vergleiche liegen intern in einem separaten Projekt-Datensatz (`kind: notebook`), der nicht als Bildprojekt angezeigt wird. Auch dessen Konfliktkopien sind im Notizbereich zugänglich. Projektbezogene Notizen liegen im jeweiligen Projekt. Alle Einträge nutzen den bestehenden Geräteabgleich und sind im vollständigen JSON-Backup enthalten. Beim Löschen eines Projekts werden auch seine Notizen gelöscht; vorher exportieren.
+
+Für das Update sind keine neuen Umgebungsvariablen oder Volumes nötig. Vor dem Update eine vollständige Sicherung erstellen; anschließend alte App-Tabs auf allen Geräten schließen und die App neu öffnen. Backups mit den neuen Notizfeldern nur in Version 2.2.0 oder neuer importieren (ältere Importer kennen diese Felder nicht). KI-Auswertungen bleiben prüfbedürftig; manuelle Notizen werden nicht automatisch an den KI-Dienst gesendet.

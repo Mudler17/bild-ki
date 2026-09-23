@@ -3,7 +3,7 @@
  * Macht die App-Hülle offline verfügbar (Sammlung ansehen/bearbeiten ohne Netz).
  * API-Aufrufe (/api/…) laufen immer direkt zum Server und werden nie zwischengespeichert.
  */
-const CACHE = 'artarchive-v3';
+const CACHE = 'artarchive-v4';
 const SHELL = ['/', '/manifest.webmanifest', '/favicon.svg', '/icon-192.png'];
 const MAX_ASSETS = 40;
 

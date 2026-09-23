@@ -6,11 +6,11 @@ import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
 import { config } from './config.js';
 import { clearSessionCookie, isAuthenticated, passwordMatches, requireAuth, setSessionCookie } from './auth.js';
-import { AiError, aiAvailable, analyzeArtwork, dailyUsage, writeWikiArticle } from './ai.js';
-import { ValidationError, parseAnalyzeRequest, parseWikiRequest } from './validate.js';
+import { AiError, aiAvailable, analyzeArtwork, dailyUsage, writeWikiArticle, compareArtworks } from './ai.js';
+import { ValidationError, parseAnalyzeRequest, parseWikiRequest, parseCompareRequest } from './validate.js';
 import { ProjectError, ProjectStore } from './projects.js';
 
-export const APP_VERSION = '2.1.0';
+export const APP_VERSION = '2.2.0';
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const distDir = path.join(rootDir, 'dist');
@@ -237,6 +237,12 @@ export async function createApp(): Promise<express.Express> {
       return;
     }
     await streamJob(res, (signal) => analyzeArtwork(input, signal));
+  });
+
+  api.post('/compare', requireAuth, aiLimiter, express.json({ limit: Math.ceil(config.maxImageBytes * 2.74) + 256 * 1024 }), async (req, res) => {
+    const input = parseCompareRequest(req.body, config.maxImageBytes);
+    if (!aiAvailable()) { sendError(res, 503, 'NOT_CONFIGURED', 'KI ist nicht konfiguriert.'); return; }
+    await streamJob(res, signal => compareArtworks(input, signal));
   });
 
   api.post('/wiki', requireAuth, aiLimiter, smallJson, async (req, res) => {

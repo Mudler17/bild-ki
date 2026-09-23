@@ -104,3 +104,11 @@ export function parseWikiRequest(body: unknown): WikiInput {
     entryTitles: titleList(body.entryTitles, 'Artikeltitel'),
   };
 }
+
+export function parseCompareRequest(body: unknown, maxImageBytes: number) {
+  if (!isRecord(body) || !Array.isArray(body.images) || body.images.length !== 2) throw new ValidationError('Bitte genau zwei Bilder auswählen.');
+  return {
+    images: body.images.map(image => parseImageDataUrl(image, maxImageBytes)),
+    question: optionalText(body.question, 2000, 'Vergleichsfrage'),
+  };
+}

@@ -85,6 +85,7 @@ function ColorAdder({ onAdd }: { onAdd: (color: string) => void }) {
 }
 
 export function ArtworkDetailModal({
+  initialTab, onCreateNote, onCompare,
   artwork,
   project,
   aiAvailable,
@@ -95,6 +96,9 @@ export function ArtworkDetailModal({
   onDeleteArtwork,
   onAnalyze,
 }: {
+  initialTab?: Tab;
+  onCreateNote: () => void;
+  onCompare: () => void;
   artwork: Artwork;
   project: Project;
   aiAvailable: boolean;
@@ -106,7 +110,7 @@ export function ArtworkDetailModal({
   onAnalyze: (options: { focusAreas: FocusArea[]; hint: string }) => Promise<boolean>;
 }) {
   const toast = useToast();
-  const [activeTab, setActiveTab] = useState<Tab>('info');
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab ?? 'info');
   const [showAnalysisConfig, setShowAnalysisConfig] = useState(false);
   const [analysisHint, setAnalysisHint] = useState('');
   const [focusAreas, setFocusAreas] = useState<FocusArea[]>(['artist', 'style', 'composition']);
@@ -269,6 +273,10 @@ export function ArtworkDetailModal({
             </div>
           </div>
 
+          <div className="flex shrink-0 flex-wrap gap-2 border-b px-3 py-2 sm:px-6">
+            <button onClick={onCreateNote} className="rounded-lg border px-3 py-2 text-sm">Notiz / Aufgabe zu diesem Bild</button>
+            <button onClick={onCompare} className="rounded-lg border px-3 py-2 text-sm">Zum Bildvergleich</button>
+          </div>
           <div className="scrollbar-hide flex shrink-0 overflow-x-auto border-b border-gray-50 bg-gray-50/50 px-3 sm:px-6" role="tablist">
             {TABS.map((tab) => (
               <button

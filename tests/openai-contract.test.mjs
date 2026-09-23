@@ -230,6 +230,18 @@ describe('OpenAI-Vertrag', () => {
     assert.equal(data.formalAnalysis.iconography, 'Häuslichkeit (plausibel).');
   });
 
+  test('Vergleich sendet beide Bilder in Reihenfolge und speichert nicht beim KI-Anbieter', async () => {
+    requests.length = 0;
+    const second = 'data:image/png;base64,aGVsbG8=';
+    const { events } = await callStream(APP_PORT, cookie, '/api/compare', { images: [TINY_JPEG, second], question: 'Vergleiche das Licht' });
+    assert.ok(events.find(e => e.type === 'result')?.data.content);
+    const sent = requests.at(-1).body;
+    assert.equal(sent.model, 'gpt-5.6-terra');
+    assert.equal(sent.store, false);
+    assert.deepEqual(sent.input[0].content.filter(c => c.type === 'input_image').map(c => c.image_url), [TINY_JPEG, second]);
+    assert.match(sent.input[0].content.at(-1).text, /Vergleiche das Licht/);
+  });
+
   test('Wiki: Text-Anfrage ohne Schema, doppelte H1 wird entfernt', async () => {
     requests.length = 0;
     const { events } = await callStream(APP_PORT, cookie, '/api/wiki', { topic: 'Delfter Malerei', projectName: 'Vermeer', artworkTitles: ['Die Milchmagd'] });

@@ -141,6 +141,8 @@ export const api = {
   logout: () => requestJson<void>('/api/logout', { method: 'POST', body: '{}' }),
   analyze: (payload: AnalyzePayload, signal?: AbortSignal) =>
     requestStream<{ result: AnalysisResult; model: string; mock: boolean }>('/api/analyze', payload, signal),
+  compare: (payload: { images: string[]; question: string }, signal?: AbortSignal) =>
+    requestStream<{ content: string; model: string; mock: boolean }>('/api/compare', payload, signal),
   wiki: (payload: WikiPayload, signal?: AbortSignal) =>
     requestStream<{ content: string; model: string; mock: boolean }>('/api/wiki', payload, signal),
 };

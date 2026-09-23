@@ -1,7 +1,7 @@
 {
   "name": "bild-ki",
   "private": true,
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "ArtArchive AI – digitales Kuratieren und kunstgeschichtliche Bildanalyse. Nachbau der AI-Studio-App „Bild-KI“: passwortgeschützt, OpenAI-Schlüssel nur auf dem Server.",
   "type": "module",
   "engines": {
