@@ -1,6 +1,7 @@
-import { useMemo } from 'react';
+import { useId, useMemo } from 'react';
 import Markdown, { defaultUrlTransform, type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { remarkWikiOutline } from '../lib/wiki-outline';
 import { Image as ImageIcon, Link as LinkIcon, Plus } from 'lucide-react';
 import type { Artwork, WikiEntry } from '../types';
 import { WIKI_SCHEME, decodeWikiHref, preprocessWikiLinks } from '../lib/wiki';
@@ -20,6 +21,7 @@ export function WikiContent({
   entries: WikiEntry[];
   onNavigate: (title: string) => void;
 }) {
+  const prefix = `wiki-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
   const processed = useMemo(() => preprocessWikiLinks(content), [content]);
   const artworkTitles = useMemo(() => new Set(artworks.map((artwork) => artwork.title.trim().toLowerCase())), [artworks]);
   const entryTitles = useMemo(() => new Set(entries.map((entry) => entry.title.trim().toLowerCase())), [entries]);
@@ -49,6 +51,10 @@ export function WikiContent({
             </button>
           );
         }
+        if (href?.startsWith('#')) return <a href={href} onClick={event => {
+          const target = document.getElementById(href.slice(1));
+          if (target) { event.preventDefault(); target.scrollIntoView({ block: 'start' }); target.focus({ preventScroll: true }); }
+        }}>{children}</a>;
         return (
           <a href={href} target="_blank" rel="noopener noreferrer nofollow">
             {children}
@@ -62,7 +68,7 @@ export function WikiContent({
   return (
     <div className="prose prose-slate mx-auto max-w-3xl leading-relaxed text-gray-800 prose-headings:font-serif prose-a:text-blue-600">
       <Markdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, [remarkWikiOutline, { prefix }]]}
         urlTransform={(url) => (url.startsWith(WIKI_SCHEME) ? url : defaultUrlTransform(url))}
         components={components}
       >

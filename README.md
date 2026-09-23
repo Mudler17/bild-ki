@@ -209,3 +209,13 @@ Die Navigation enthält **Sammlung**, **Suche**, **Bildvergleich** und **Notizen
 - Appweite Notizen und Vergleiche liegen intern in einem separaten Projekt-Datensatz (`kind: notebook`), der nicht als Bildprojekt angezeigt wird. Auch dessen Konfliktkopien sind im Notizbereich zugänglich. Projektbezogene Notizen liegen im jeweiligen Projekt. Alle Einträge nutzen den bestehenden Geräteabgleich und sind im vollständigen JSON-Backup enthalten. Beim Löschen eines Projekts werden auch seine Notizen gelöscht; vorher exportieren.
 
 Für das Update sind keine neuen Umgebungsvariablen oder Volumes nötig. Vor dem Update eine vollständige Sicherung erstellen; anschließend alte App-Tabs auf allen Geräten schließen und die App neu öffnen. Backups mit den neuen Notizfeldern nur in Version 2.2.0 oder neuer importieren (ältere Importer kennen diese Felder nicht). KI-Auswertungen bleiben prüfbedürftig; manuelle Notizen werden nicht automatisch an den KI-Dienst gesendet.
+
+## Wiki organisieren und diskutieren (2.3.0)
+
+- **Verschieben** am Artikel oder Ordner öffnet die Zielauswahl innerhalb des aktuellen Projekts. Artikel können zurück nach „Unsortiert“, Ordner auf die oberste Ebene. Unterordner und ihre Artikel bleiben beim Verschieben eines Ordners zusammen. Der eigene Ordner und seine Nachfahren sind keine zulässigen Ziele; die Prüfung erfolgt nochmals beim Anwenden.
+- Der Artikelkopf zeigt den Ordnerpfad, das gespeicherte Erstellungsdatum, die letzte Artikeländerung und einen Link zur Diskussion. Verschieben und Diskutieren verändern das Erstellungsdatum nicht.
+- Ein verlinktes Inhaltsverzeichnis entsteht automatisch aus Markdown-Überschriften. Auch Setext-Überschriften und wiederholte Überschriftentexte erhalten passende, eindeutige Sprungziele. Überschriften in Codeblöcken werden nicht aufgenommen. Artikel ohne Überschriften haben kein Inhaltsverzeichnis.
+- Die **Diskussion** enthält eigene datierte Beiträge. Beiträge lassen sich bearbeiten oder nach Bestätigung löschen. Der neue Beitragsentwurf und Bearbeitungen werden automatisch gespeichert und synchronisiert; „Beitrag hinzufügen“ übernimmt den Entwurf in die Diskussion. Beiträge sind vom Artikeltext getrennt. Artikel löschen entfernt auch Diskussion und Entwurf.
+- Vollständige Backups, Geräteabgleich und Konfliktkopien enthalten Diskussionen und Entwürfe. Die allgemeine Suche berücksichtigt auch deren Text. Das Erstellungsdatum älterer importierter Artikel entspricht dem bereits gespeicherten Datum; bei fehlenden Angaben kann das der damalige Importzeitpunkt sein.
+
+Keine neuen Servereinstellungen erforderlich. Nach dem Update alle App-Tabs neu öffnen; neue Backups mit Diskussionen nur in Version 2.3.0 oder neuer importieren.

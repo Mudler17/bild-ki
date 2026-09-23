@@ -10,7 +10,7 @@ import { AiError, aiAvailable, analyzeArtwork, dailyUsage, writeWikiArticle, com
 import { ValidationError, parseAnalyzeRequest, parseWikiRequest, parseCompareRequest } from './validate.js';
 import { ProjectError, ProjectStore } from './projects.js';
 
-export const APP_VERSION = '2.2.0';
+export const APP_VERSION = '2.3.0';
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const distDir = path.join(rootDir, 'dist');

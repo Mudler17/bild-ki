@@ -90,6 +90,11 @@ function wikiEntry(value: unknown): WikiEntry | null {
     ...(typeof value.folderId === 'string' && value.folderId ? { folderId: value.folderId } : {}),
     title: text(value.title, 'Ohne Titel'),
     content: text(value.content),
+    ...(typeof value.discussionDraft === 'string' ? { discussionDraft: value.discussionDraft } : {}),
+    ...(Array.isArray(value.discussion) ? { discussion: value.discussion.filter(isRecord).map(post => ({
+      id: text(post.id) || generateId(), content: text(post.content),
+      createdAt: timestamp(post.createdAt, now), updatedAt: timestamp(post.updatedAt, now),
+    })) } : {}),
     createdAt: timestamp(value.createdAt, now),
     updatedAt: timestamp(value.updatedAt, now),
     source: value.source === 'ai' ? 'ai' : 'user',

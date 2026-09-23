@@ -50,6 +50,15 @@ export function validateProject(value: unknown, id: string): Project {
       throw new ProjectError(400, 'INVALID_PROJECT', 'Ungültige Wiki-Daten.');
     }
   }
+  for (const entry of (value.wikiEntries ?? []) as Record<string, unknown>[]) {
+    if ((entry.discussionDraft !== undefined && typeof entry.discussionDraft !== 'string') ||
+        (entry.discussion !== undefined && (!Array.isArray(entry.discussion) || !entry.discussion.every(post =>
+          record(post) && typeof post.id === 'string' && typeof post.content === 'string' &&
+          typeof post.createdAt === 'number' && Number.isFinite(post.createdAt) &&
+          typeof post.updatedAt === 'number' && Number.isFinite(post.updatedAt))))) {
+      throw new ProjectError(400, 'INVALID_PROJECT', 'Ungültige Artikel-Diskussion.');
+    }
+  }
   return value as Project;
 }
 
