@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 /**
  * API-Tests gegen den gebauten Server (vorher: npm run build).
  * Läuft im Demo-Modus (AI_MOCK=1) – es werden keine echten KI-Anfragen gestellt.
@@ -5,6 +8,8 @@
  */
 import { spawn } from 'node:child_process';
 import { after, before, describe, test } from 'node:test';
+const projectTestDir = mkdtempSync(join(tmpdir(), 'bild-ki-api-'));
+after(() => rmSync(projectTestDir, { recursive: true, force: true }));
 import assert from 'node:assert/strict';
 
 const PORT = 3900 + Math.floor(Math.random() * 90);
@@ -19,7 +24,7 @@ let cookie = '';
 
 function startServer(env) {
   return spawn(process.execPath, ['dist-server/index.js'], {
-    env: { ...process.env, NODE_ENV: 'production', HOST: '127.0.0.1', ...env },
+    env: { ...process.env, DATA_DIR: projectTestDir, NODE_ENV: 'production', HOST: '127.0.0.1', ...env },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 }
@@ -69,6 +74,7 @@ describe('API', () => {
       SESSION_SECRET: 'test-secret-test-secret-test-secret',
       AI_MOCK: '1',
       AI_MOCK_DELAY_MS: '50',
+      MAX_PROJECT_MB: '1',
       OPENAI_API_KEY: '',
     });
     await waitForServer();
@@ -137,6 +143,36 @@ describe('API', () => {
     const forged = `${cookie.slice(0, -3)}abc`;
     const response = await post('/api/wiki', { topic: 'Test' }, { Cookie: forged });
     assert.equal(response.status, 401);
+  });
+
+  test('Projekt-API: Zugang, Versionsschutz, Herkunftsprüfung, Größenlimit und Löschung', async () => {
+    const url = `${BASE}/api/projects/p`;
+    const request = (method, body, headers = { Cookie: cookie }) => fetch(url, {
+      method, headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body),
+    });
+    assert.equal((await fetch(`${BASE}/api/projects`)).status, 401);
+    assert.equal((await fetch(url)).status, 401);
+    assert.equal((await request('PUT', {}, {})).status, 401);
+    assert.equal((await request('DELETE', {}, {})).status, 401);
+    const project = { id: 'p', name: 'Test', description: '', historicalContext: '', createdAt: 1, artworks: [] };
+    assert.equal((await request('PUT', { project, expectedRevision: null }, { Cookie: cookie, Origin: 'https://evil.example' })).status, 403);
+    assert.equal((await request('PUT', { project, expectedRevision: null })).status, 200);
+    const manifest = await (await fetch(`${BASE}/api/projects`, { headers: { Cookie: cookie } })).json();
+    assert.ok(manifest.archiveId);
+    assert.equal(manifest.projects.length, 1);
+    const response = await fetch(url, { headers: { Cookie: cookie } });
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    const stored = await response.json();
+    assert.deepEqual(stored.project, project);
+    const changed = { ...project, name: 'Neu' };
+    assert.equal((await request('PUT', { project: changed, expectedRevision: null })).status, 409);
+    assert.equal((await request('DELETE', { expectedRevision: 'veraltet' })).status, 409);
+    assert.equal((await request('PUT', { project: changed, expectedRevision: stored.revision })).status, 200);
+    assert.equal((await request('PUT', { project: { ...changed, notes: 'x'.repeat(2 * 1024 * 1024) }, expectedRevision: stored.revision })).status, 413);
+    const current = await (await fetch(url, { headers: { Cookie: cookie } })).json();
+    assert.equal((await request('DELETE', { expectedRevision: current.revision }, { Cookie: cookie, Origin: 'https://evil.example' })).status, 403);
+    assert.equal((await request('DELETE', { expectedRevision: current.revision })).status, 204);
+    assert.equal((await fetch(url, { headers: { Cookie: cookie } })).status, 404);
   });
 
   test('Fremder Ursprung (CSRF) wird abgelehnt', async () => {

@@ -4,7 +4,7 @@ Digitales Kuratieren und kunstgeschichtliche Bildanalyse – ein Nachbau der Goo
 
 - **Passwortgeschützt** – ohne `APP_ACCESS_PASSWORD` startet der Server gar nicht.
 - **OpenAI-Schlüssel nur auf dem Server** – der Browser spricht ausschließlich mit dem eigenen Express-Server.
-- **Sammlung bleibt lokal** – Projekte, Bilder und Texte liegen in der IndexedDB des Geräts; Sicherung per JSON-Export oder Ordner-Sync.
+- **Persönliches Archiv auf deinen Geräten** – Projekte, Bilder und Wiki-Texte liegen geschützt auf dem eigenen Server. IndexedDB hält eine lokale Kopie und noch nicht übertragene Änderungen. Dasselbe Passwort öffnet auf allen Geräten dieselbe Sammlung.
 
 Die ausführliche Analyse des Originals mit allen Befunden steht in [`docs/ANALYSE.md`](docs/ANALYSE.md).
 
@@ -14,6 +14,7 @@ Die ausführliche Analyse des Originals mit allen Befunden steht in [`docs/ANALY
 
 | Bereich | Was die App kann |
 |---|---|
+| Geräteabgleich | Automatischer Abgleich pro Projekt; Versionsprüfung, Konfliktkopien und sichtbarer Speicherstatus |
 | Projekte | Anlegen, umbenennen, löschen; Übersicht mit Anzahl der Werke und Wiki-Artikel |
 | Galerie | Mehrfach-Upload und Drag & Drop, Bilder werden im Browser auf max. 2000 px verkleinert |
 | Bild-Werkbank | Zoom (Knöpfe, Mausrad, Zwei-Finger-Geste), Verschieben, Einpassen, **Ausschnitt** als neues Werk oder als Detailansicht |
@@ -37,14 +38,7 @@ Die ausführliche Analyse des Originals mit allen Befunden steht in [`docs/ANALY
 
 ## Architektur
 
-```
-Browser (React)                        Server (Express, Node 22)                 OpenAI
-┌──────────────────────────┐  HTTPS   ┌───────────────────────────────┐  HTTPS  ┌──────────────┐
-│ Galerie, Werkbank, Wiki  │ ───────▶ │ Passwort · Rate-/Tageslimit   │ ──────▶ │ Responses API│
-│ Daten: IndexedDB (lokal) │ ◀─────── │ Prompts · Schema · Bereinigung│ ◀────── │ gpt-5.6-terra│
-└──────────────────────────┘  Stream  │ OPENAI_API_KEY (nur hier)     │         └──────────────┘
-                                      └───────────────────────────────┘
-```
+Der Browser hält Projekte und die zuletzt bestätigten Serverversionen gemeinsam in IndexedDB. Der passwortgeschützte Express-Server speichert jedes Projekt mit Bildern und Wiki als atomar ersetzte JSON-Datei unter `DATA_DIR/projects`. Eine kleine Projektliste liefert die Versionsstände; nur neue oder geänderte Projekte werden heruntergeladen. Änderungen übertragen jeweils das betroffene vollständige Projekt, nicht das ganze Archiv. KI-Anfragen laufen weiterhin über den Express-Server zu OpenAI.
 
 Lange KI-Antworten kommen als Event-Stream mit Ping alle 10 Sekunden. So greift das Zeitlimit von Cloudflare nicht (Fehler 524, wenn der Server 125 Sekunden lang nichts sendet), auch wenn das Modell länger „nachdenkt“.
 
@@ -81,19 +75,47 @@ NODE_ENV=production npm start
    OPENAI_API_KEY=sk-...
    TRUST_PROXY=2
    APP_ALLOWED_ORIGINS=https://bild-ki.ki-kernel.de
+   DATA_DIR=/app/data
    ```
 
-6. **Health Check:** Pfad `/healthz` (das Image hat zusätzlich einen eigenen Docker-Healthcheck).
-7. **Cloudflare-DNS:** A-Record `bild-ki` auf die Server-IP zuerst **grau (DNS only)**, bis Traefik das Let's-Encrypt-Zertifikat hat – dann auf **orange (Proxied)** umstellen. SSL-Modus **Full (strict)**. Sonst drohen Fehler 526 bzw. Weiterleitungsschleifen.
+6. **Vor dem ersten Deployment: Configuration → Persistent Storage → Add → Volume Mount.** Name `bild-ki-data`, Source Path leer lassen, Destination Path `/app/data`. Ohne dieses Volume liegen Daten nur im austauschbaren Container. Ein eigenes vorhandenes Daten-Volume nicht löschen oder ersetzen. Das Image läuft als `node` (UID/GID 1000); bei einem Bind Mount muss das Ziel für diesen Benutzer schreibbar sein.
+7. **Configuration → Advanced: Consistent Container Names aktivieren.** Dadurch stoppt Coolify die bisherige Instanz vor dem Start der neuen. Dieser persönliche Dateispeicher unterstützt keine gleichzeitig schreibenden Serverinstanzen.
+8. **Health Check:** Pfad `/healthz` (das Image hat zusätzlich einen eigenen Docker-Healthcheck).
+9. **Cloudflare-DNS:** A-Record `bild-ki` auf die Server-IP zuerst **grau (DNS only)**, bis Traefik das Let's-Encrypt-Zertifikat hat – dann auf **orange (Proxied)** umstellen. SSL-Modus **Full (strict)**. Sonst drohen Fehler 526 bzw. Weiterleitungsschleifen.
 
 `TRUST_PROXY=2` sorgt dafür, dass hinter Cloudflare + Traefik die echte Besucher-IP für Rate-Limits und das `Secure`-Cookie erkannt wird.
 
 **Tipp für die Kosten:** Im OpenAI-Dashboard ein eigenes Projekt mit eigenem Schlüssel für diese App anlegen und dort Budget-Benachrichtigungen bzw. Limits setzen – zusätzlich zum `AI_DAILY_LIMIT` des Servers.
 
+## Vorhandene Installation auf Gerätezugriff umstellen
+
+1. Auf jedem bisher verwendeten Gerät vor dem Update **Export (JSON)** ausführen und die Datei aufbewahren. Alte Tabs anschließend schließen; keine alte App-Version parallel weiterbearbeiten.
+2. In Coolify das oben beschriebene Volume, `DATA_DIR=/app/data` und **Consistent Container Names** einrichten, **bevor** die neue Version erstmals bereitgestellt wird. Passwort, Session-Schlüssel und OpenAI-Schlüssel bleiben unverändert.
+3. Neue Version deployen. Auf dem Gerät mit dem bisherigen Bestand dieselbe App-Adresse öffnen und anmelden. Bestehende lokale Projekte werden automatisch übernommen. Bereits identische Projekte werden nicht dupliziert; abweichende Fassungen mit gleicher ID bleiben als Konfliktkopien erhalten.
+4. Warten, bis oben **„Auf dem Server gespeichert“** erscheint. Auf dem zweiten Gerät dieselbe Adresse öffnen und dasselbe Passwort verwenden. Dort erscheinen auch Bilder, Detailbilder, Analysen und Wiki.
+5. Ein Testprojekt anlegen, erneut deployen und prüfen, dass es noch vorhanden ist. Erst dann produktiv weiterarbeiten. Persistentes Volume separat sichern; Synchronisation ersetzt keine Sicherung.
+
+Offizielle Coolify-Anleitungen: https://coolify.io/docs/core/persistent-storage/storage-mounts/volume-mounts und https://coolify.io/docs/applications/deployments/rolling-updates
+
+## Verhalten und Grenzen des Geräteabgleichs
+
+- Ein persönliches Archiv, keine Benutzerverwaltung. Wer das Passwort kennt, hat Zugriff auf alle Projekte.
+- Änderungen werden zunächst lokal gesichert und nach kurzer Pause hochgeladen. Der Abgleich prüft außerdem alle 20 Sekunden bei sichtbarer App und beim Zurückkehren zum Fenster. **Jetzt abgleichen** aktualisiert sofort.
+- Offline weiterarbeiten ist möglich, wenn auf diesem Gerät schon eine Anmeldung und lokale Daten vorhanden sind. Vor dem Gerätewechsel auf die Serverbestätigung warten. Nach der nächsten Verbindung werden lokale Änderungen übertragen.
+- Ändern zwei Geräte dasselbe Projekt, bleibt die Serverfassung bestehen und die lokale Fassung erhält eine eigene ID mit dem Namenszusatz **(Konfliktkopie)**. Es findet keine automatische Zusammenführung einzelner Textfelder statt. Danach die Fassungen vergleichen und die überflüssige Kopie gezielt löschen.
+- Eine zwischenzeitliche Änderung schützt vor einer veralteten Löschung. Ein auf dem Server gelöschtes, lokal bearbeitetes Projekt bleibt als neue Konfliktkopie erhalten.
+- Ein anderes/leeres Daten-Volume hat eine andere Archivkennung: bekannte Geräte stoppen den Abgleich, statt lokale Projekte zu löschen. Das bisherige Volume wieder einbinden. Bei einer vollständigen Wiederherstellung auch die Datei `projects/.archive-id` übernehmen.
+- Pro Browserprofil ist bei verfügbarer Web Locks API nur ein Archiv-Tab gleichzeitig aktiv. Weitere Tabs warten auf das Schließen des ersten. Verschiedene Geräte können gleichzeitig arbeiten.
+- **Genau eine laufende Serverinstanz/Replica pro Daten-Volume.** Keine parallelen Deployments mit gemeinsamem schreibbarem Volume; vorhandene Instanz vor dem Start der neuen stoppen. Der Dateispeicher ist für das persönliche Archiv vorgesehen, nicht für einen Cluster.
+- Eine Projektanfrage darf standardmäßig bis zu 64 MiB groß sein (inklusive eingebetteter Bilder). Bei sehr großen Sammlungen mehrere Projekte verwenden; übergroße Änderungen bleiben lokal und werden als Fehler angezeigt. Proxy-Limits müssen ebenfalls passen.
+- Der Speicherstatus bestätigt den Serverstand des letzten erfolgreichen Abgleichs; Änderungen anderer Geräte werden beim nächsten Abgleich sichtbar.
+
 ## Konfiguration
 
 | Variable | Standard | Bedeutung |
 |---|---|---|
+| `DATA_DIR` | lokal `./data`; im Docker-Image `/app/data` | Persistenter Projektordner; außerhalb des Images in Produktion ausdrücklich setzen |
+| `MAX_PROJECT_MB` | `64` | Maximale Größe einer Projektanfrage inklusive Bilder (MiB) |
 | `APP_ACCESS_PASSWORD` | – (Pflicht) | Passwort für den Zugang; ohne Wert startet der Server nicht |
 | `SESSION_SECRET` | zufällig | Schlüssel für die Sitzungs-Cookies; ohne festen Wert verfallen Anmeldungen bei jedem Neustart |
 | `OPENAI_API_KEY` | – | OpenAI-Schlüssel; ohne Wert sind KI-Funktionen aus |
@@ -131,11 +153,12 @@ Werke mit externen Bildadressen werden beim Import aus Sicherheitsgründen über
 
 ## Sichern – bitte regelmäßig
 
-Browser dürfen lokale Daten löschen; Safari tut das z. B. nach sieben Tagen ohne Nutzung, wenn der Tracking-Schutz aktiv ist. Deshalb:
+Der Serverbestand benötigt ein Backup des vollständigen Daten-Volumes. Für einen konsistenten dateibasierten Snapshot die App kurz stoppen; alternativ über die App einen JSON-Export erstellen.
 
-- Regelmäßig **Export (JSON)** und die Datei in iCloud/„Dateien“ ablegen (die App erinnert nach 14 Tagen).
-- Am iPad die App über *Teilen → Zum Home-Bildschirm* installieren.
-- Am Desktop (Chrome/Edge) **Ordner verknüpfen** – dann schreibt die App nach jeder Änderung automatisch `ArtArchive-Backup.json`.
+- Regelmäßig **Export (JSON)** verwenden und die Datei außerhalb des Servers aufbewahren. Der Export enthält den aktuellen lokalen Bestand; vor einem vollständigen Serverbackup zuerst erfolgreich abgleichen.
+- Am Desktop kann **Ordner verknüpfen** zusätzlich automatisch `ArtArchive-Backup.json` schreiben. Das ist eine einseitige Sicherung, kein zweiter Synchronisationsweg. Pro Gerät einen eigenen Sicherungsordner verwenden.
+- Browserdaten bleiben für noch nicht hochgeladene Offline-Änderungen wichtig. Bei Speicherfehlern direkt JSON exportieren; Browserdaten erst nach erfolgreichem Abgleich/Sicherung löschen.
+- **Import (JSON)** ersetzt nach Bestätigung Projekte mit gleicher ID vollständig; diese bewusste Ersetzung wird anschließend ebenfalls auf den Server übertragen.
 
 ## Tests
 
@@ -144,6 +167,7 @@ npm run build
 npm test
 ```
 
+- `tests/projects.test.mjs` – Übernahme alter Daten, Gerätewechsel, Offline-Neustart, Konflikte, Löschungen, verlorene Antworten, parallele Bearbeitung, Speicherfehler, Server-Neustart und Archivkennung
 - `tests/api.test.mjs` – Start ohne Passwort, Login, Cookies, CSRF, Eingabeprüfung, Rate-Limit, Stream-Antworten (Demo-Modus)
 - `tests/openai-contract.test.mjs` – prüft gegen einen lokalen OpenAI-Mock das Anfrageformat (Responses API, striktes JSON-Schema, Bild als Data-URL, `store: false`), Ablehnungen, abgeschnittene Antworten, falschen Key, leeres Guthaben, Abbruch, Ausweichmodell und Tageslimit
 
@@ -157,6 +181,7 @@ npm test
 ```
 server/            Express-Server (TypeScript)
   index.ts         App, Sicherheits-Header, Routen, Event-Stream, Auslieferung
+  projects.ts      Persistenter persönlicher Projektspeicher mit Versionsprüfung
   auth.ts          Passwort, signierte Sitzungs-Cookies
   ai.ts            OpenAI-Aufrufe, Fehlerübersetzung, Tageslimit, Demo-Modus
   prompts.ts       Prompts, JSON-Schema, Bereinigung der Antworten
@@ -165,7 +190,7 @@ server/            Express-Server (TypeScript)
 src/               React-Frontend
   App.tsx          Sitzung, Projekte, Speichern, Analyse, Import/Export
   components/      Galerie, Detailansicht, Werkbank, Wiki, Dialoge …
-  lib/             IndexedDB, Backup, Bildverarbeitung, Wiki-Links, API
+  lib/             IndexedDB, Geräteabgleich, Backup, Bildverarbeitung, Wiki-Links, API
 public/            Icons, Manifest, Service Worker
 tests/             API- und OpenAI-Vertragstests
 docs/ANALYSE.md    Analyse des Originals und Änderungsliste

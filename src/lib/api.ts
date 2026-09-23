@@ -1,4 +1,4 @@
-import type { AnalysisResult, FocusArea, SessionInfo } from '../types';
+import type { AnalysisResult, FocusArea, SessionInfo, Project } from '../types';
 
 /** Zugriff auf den eigenen Server. Der OpenAI-Schlüssel ist nie im Browser. */
 
@@ -28,7 +28,7 @@ async function readError(response: Response): Promise<ApiError> {
     code = data.code;
   } catch {
     // keine JSON-Antwort (z. B. Proxy-Fehlerseite)
-    if (response.status === 413) message = 'Das Bild ist zu groß für den Server.';
+    if (response.status === 413) message = 'Die Daten sind zu groß für den Server.';
     if (response.status === 502 || response.status === 504 || response.status === 524) {
       message = 'Der Server hat nicht rechtzeitig geantwortet. Bitte erneut versuchen.';
     }
@@ -126,6 +126,16 @@ export interface WikiPayload {
 }
 
 export const api = {
+  projects: (signal?: AbortSignal) => requestJson<{ archiveId: string; projects: { id: string; revision: string }[] }>('/api/projects', { signal }),
+  project: (id: string, signal?: AbortSignal) => requestJson<{ revision: string; project: Project }>(`/api/projects/${encodeURIComponent(id)}`, { signal }),
+  saveProject: (project: Project, expectedRevision: string | null, signal?: AbortSignal) =>
+    requestJson<{ revision: string }>(`/api/projects/${encodeURIComponent(project.id)}`, {
+      method: 'PUT', body: JSON.stringify({ project, expectedRevision }), signal,
+    }),
+  deleteProject: (id: string, expectedRevision: string, signal?: AbortSignal) =>
+    requestJson<void>(`/api/projects/${encodeURIComponent(id)}`, {
+      method: 'DELETE', body: JSON.stringify({ expectedRevision }), signal,
+    }),
   session: () => requestJson<SessionInfo>('/api/session'),
   login: (password: string) => requestJson<void>('/api/login', { method: 'POST', body: JSON.stringify({ password }) }),
   logout: () => requestJson<void>('/api/logout', { method: 'POST', body: '{}' }),

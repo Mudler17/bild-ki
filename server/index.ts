@@ -8,8 +8,9 @@ import { config } from './config.js';
 import { clearSessionCookie, isAuthenticated, passwordMatches, requireAuth, setSessionCookie } from './auth.js';
 import { AiError, aiAvailable, analyzeArtwork, dailyUsage, writeWikiArticle } from './ai.js';
 import { ValidationError, parseAnalyzeRequest, parseWikiRequest } from './validate.js';
+import { ProjectError, ProjectStore } from './projects.js';
 
-export const APP_VERSION = '2.0.0';
+export const APP_VERSION = '2.1.0';
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const distDir = path.join(rootDir, 'dist');
@@ -113,6 +114,9 @@ const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 // ---------- App ----------
 
 export async function createApp(): Promise<express.Express> {
+  if (!config.dataDir) throw new Error('DATA_DIR fehlt. Bitte einen dauerhaften Datenspeicher einrichten (Coolify: /app/data).');
+  const projects = new ProjectStore(path.resolve(config.dataDir, 'projects'));
+  await projects.open();
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', config.trustProxy);
@@ -162,6 +166,7 @@ export async function createApp(): Promise<express.Express> {
   // Kleine Anfragen: kleines Limit. Nur die Bildanalyse darf groß sein – und erst nach der Anmeldeprüfung.
   const smallJson = express.json({ limit: '64kb' });
   const imageJson = express.json({ limit: Math.ceil(config.maxImageBytes * 1.37) + 256 * 1024 });
+  const projectJson = express.json({ limit: config.maxProjectBytes });
 
   const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -212,6 +217,19 @@ export async function createApp(): Promise<express.Express> {
     res.status(204).end();
   });
 
+  // Personal archive: the existing password grants access to this one collection.
+  api.get('/projects', requireAuth, (_req, res) => res.json({ archiveId: projects.archiveId, projects: projects.list() }));
+  api.get('/projects/:id', requireAuth, async (req, res) => {
+    res.json(await projects.get(String(req.params.id)));
+  });
+  api.put('/projects/:id', requireAuth, projectJson, async (req, res) => {
+    res.json(await projects.put(String(req.params.id), req.body?.expectedRevision, req.body?.project));
+  });
+  api.delete('/projects/:id', requireAuth, smallJson, async (req, res) => {
+    await projects.remove(String(req.params.id), req.body?.expectedRevision);
+    res.status(204).end();
+  });
+
   api.post('/analyze', requireAuth, aiLimiter, imageJson, async (req, res) => {
     const input = parseAnalyzeRequest(req.body, config.maxImageBytes);
     if (!aiAvailable()) {
@@ -236,7 +254,7 @@ export async function createApp(): Promise<express.Express> {
 
   api.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
     if (res.headersSent) return;
-    if (error instanceof ValidationError) {
+    if (error instanceof ValidationError || error instanceof ProjectError) {
       sendError(res, error.status, error.code, error.message);
       return;
     }

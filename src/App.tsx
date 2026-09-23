@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Archive as ArchiveIcon, Loader2, RefreshCcw, WifiOff } from 'lucide-react';
 import { APP_NAME, APP_VERSION } from './config';
 import type { Artwork, AnalysisResult, FocusArea, Project, SessionInfo } from './types';
@@ -15,7 +15,8 @@ import {
   writeBackupToFolder,
 } from './lib/backup';
 import { compressImage } from './lib/image';
-import { ProjectPersister, deleteMeta, getMeta, loadProjects, requestPersistentStorage, setMeta } from './lib/storage';
+import { deleteMeta, getMeta, loadArchiveCache, saveArchiveCache, requestPersistentStorage, setMeta } from './lib/storage';
+import { ArchiveSync, type SyncStatus } from './lib/sync-engine';
 import { errorMessage, flattenClusters, generateId } from './lib/util';
 import { ArtworkDetailModal } from './components/ArtworkDetailModal';
 import { BackupModal, type FolderStatus } from './components/BackupModal';
@@ -168,7 +169,11 @@ type PromptState = { kind: 'create' } | { kind: 'rename'; project: Project };
 
 function ArchiveApp({ session, onLogout, onRetryConnection }: { session: SessionInfo; onLogout: () => Promise<void>; onRetryConnection: () => void }) {
   const toast = useToast();
-  const [projects, setProjects] = useState<Project[] | null>(null);
+  const [projects, renderProjects] = useState<Project[] | null>(null);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>({ kind: 'loading', message: 'Archiv wird geladen …' });
+  const [syncNotice, setSyncNotice] = useState('');
+  const persisterRef = useRef<ArchiveSync | null>(null);
+  const setProjects = (update: Project[] | ((previous: Project[] | null) => Project[] | null)) => persisterRef.current?.edit(update);
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
   const [view, setView] = useState<ProjectViewMode>('gallery');
   const [selectedArtworkId, setSelectedArtworkId] = useState<string | null>(null);
@@ -185,11 +190,7 @@ function ArchiveApp({ session, onLogout, onRetryConnection }: { session: Session
   const projectsRef = useRef<Project[] | null>(null);
   const folderRef = useRef(folder);
   const folderTimer = useRef<number | undefined>(undefined);
-  const saveErrorShown = useRef(false);
 
-  useEffect(() => {
-    projectsRef.current = projects;
-  }, [projects]);
   useEffect(() => {
     folderRef.current = folder;
   }, [folder]);
@@ -208,83 +209,80 @@ function ArchiveApp({ session, onLogout, onRetryConnection }: { session: Session
     }
   }, []);
 
-  const persister = useMemo(
-    () =>
-      new ProjectPersister(
-        (error) => {
-          if (saveErrorShown.current) return;
-          saveErrorShown.current = true;
-          toast.error(`Speichern fehlgeschlagen: ${errorMessage(error, 'Speicher voll?')} Bitte ein Backup exportieren.`);
-          window.setTimeout(() => (saveErrorShown.current = false), 30_000);
-        },
-        (saved) => {
+  useEffect(() => {
+    let cancelled = false;
+    let release: (() => void) | undefined;
+    let engine: ArchiveSync | undefined;
+    const waiting = new AbortController();
+    const onWake = () => { if (document.visibilityState !== 'hidden') void engine?.sync(); };
+    const interval = window.setInterval(onWake, 20_000);
+    const waitingMessage = window.setTimeout(() => {
+      if (!engine && !cancelled) setSyncStatus({ kind: 'loading', message: 'Das Archiv ist in einem anderen Tab geöffnet. Schließe diesen Tab dort, um hier weiterzuarbeiten.' });
+    }, 1500);
+    const run = async () => {
+      if (cancelled) return;
+      window.clearTimeout(waitingMessage);
+      engine = new ArchiveSync({
+        read: loadArchiveCache,
+        write: saveArchiveCache,
+        remote: api,
+        onChange: (list) => { projectsRef.current = list; renderProjects(list); },
+        onStatus: setSyncStatus,
+        onNotice: setSyncNotice,
+        onSaved: (saved) => {
           if (folderRef.current.status !== 'granted') return;
           window.clearTimeout(folderTimer.current);
           folderTimer.current = window.setTimeout(() => void syncFolderNow(saved), 4000);
         },
-      ),
-    [toast, syncFolderNow],
-  );
-
-  // Laden
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
+      });
+      persisterRef.current = engine;
       try {
-        const { projects: loaded, migratedFromLegacy } = await loadProjects();
-        if (cancelled) return;
-        persister.prime(loaded);
-        setProjects(loaded);
-        if (migratedFromLegacy) toast.success('Daten der bisherigen Version wurden übernommen.');
-        // Erinnerung an die Sicherung (Browser dürfen lokale Daten löschen, Safari z. B. nach 7 Tagen ohne Nutzung)
-        const artworkTotal = loaded.reduce((sum, project) => sum + project.artworks.length, 0);
-        const lastExport = await getMeta<number>('lastExport');
-        const days = lastExport ? Math.floor((Date.now() - lastExport) / 86_400_000) : null;
-        if (!cancelled && artworkTotal >= 3 && (days === null || days >= 14)) {
-          toast.info(
-            days === null
-              ? 'Tipp: Noch keine Sicherung – unter Einstellungen „Export (JSON)“ wählen.'
-              : `Letzte Sicherung vor ${days} Tagen – bitte unter Einstellungen exportieren.`,
-          );
-        }
-      } catch (error) {
-        if (cancelled) return;
-        toast.error(`Lokale Daten konnten nicht geladen werden: ${errorMessage(error, 'unbekannter Fehler')}`);
-        setProjects([]);
-      }
-      if (folderSyncSupported()) {
-        const handle = await getBackupFolder();
-        if (handle && !cancelled) {
-          const state = await folderPermission(handle).catch(() => 'prompt' as PermissionState);
-          setFolder({ handle, status: state === 'granted' ? 'granted' : state === 'denied' ? 'denied' : 'prompt' });
-        }
-      }
-    })();
+        await engine.load();
+        if (!cancelled) await new Promise<void>((resolve) => { release = resolve; });
+      } finally { await engine.close(); }
+    };
+    const started = navigator.locks
+      ? navigator.locks.request('artarchive-personal-archive', { signal: waiting.signal }, run)
+      : run();
+    void started.catch((error: unknown) => {
+      if (!cancelled) setSyncStatus({ kind: 'error', message: `Archiv konnte nicht geladen werden: ${errorMessage(error, 'Unbekannter Fehler')}` });
+    });
+    window.addEventListener('online', onWake);
+    window.addEventListener('focus', onWake);
+    document.addEventListener('visibilitychange', onWake);
     return () => {
       cancelled = true;
+      waiting.abort();
+      release?.();
+      void engine?.close().catch(() => undefined);
+      if (persisterRef.current === engine) persisterRef.current = null;
+      window.clearInterval(interval);
+      window.clearTimeout(waitingMessage);
+      window.clearTimeout(folderTimer.current);
+      window.removeEventListener('online', onWake);
+      window.removeEventListener('focus', onWake);
+      document.removeEventListener('visibilitychange', onWake);
     };
-  }, [persister, toast]);
+  }, [syncFolderNow]);
 
-  // Speichern: Strukturänderungen (Import, Upload, Löschen …) sofort, Texteingaben kurz entprellt
-  const structureRef = useRef('');
   useEffect(() => {
-    if (!projects) return;
-    const structure = projects
-      .map((project) => `${project.id}:${project.artworks.length}:${project.wikiEntries?.length ?? 0}:${project.wikiFolders?.length ?? 0}`)
-      .join('|');
-    const structural = structure !== structureRef.current;
-    structureRef.current = structure;
-    persister.schedule(projects, structural ? 0 : 300);
-  }, [projects, persister]);
+    if (!folderSyncSupported()) return;
+    let cancelled = false;
+    void (async () => {
+      const handle = await getBackupFolder();
+      if (!handle || cancelled) return;
+      const state = await folderPermission(handle).catch(() => 'prompt' as PermissionState);
+      if (!cancelled) setFolder({ handle, status: state === 'granted' ? 'granted' : state === 'denied' ? 'denied' : 'prompt' });
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
-  // Beim Verlassen: sofort sichern; am Desktop warnen, falls noch geschrieben wird
+  // Local drafts survive closing the app; the server status indicates whether another device can see them.
   useEffect(() => {
-    const flush = () => void persister.flush();
-    const onVisibility = () => {
-      if (document.visibilityState === 'hidden') flush();
-    };
+    const flush = () => { void persisterRef.current?.flush().catch(() => toast.error('Lokales Speichern fehlgeschlagen. Bitte JSON exportieren.')); };
+    const onVisibility = () => { if (document.visibilityState === 'hidden') flush(); };
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (!persister.isBusy()) return;
+      if (!persisterRef.current?.isBusy()) return;
       flush();
       event.preventDefault();
     };
@@ -296,7 +294,7 @@ function ArchiveApp({ session, onLogout, onRetryConnection }: { session: Session
       window.removeEventListener('pagehide', flush);
       window.removeEventListener('beforeunload', onBeforeUnload);
     };
-  }, [persister]);
+  }, [toast]);
 
   // ---------- Änderungen (immer funktional, damit parallele Aktionen nichts überschreiben) ----------
 
@@ -459,7 +457,9 @@ function ArchiveApp({ session, onLogout, onRetryConnection }: { session: Session
     return (
       <FullscreenMessage>
         <ArchiveIcon size={32} />
-        <Loader2 className="animate-spin" />
+        {syncStatus.kind !== 'error' && <Loader2 className="animate-spin" />}
+        <p className="max-w-lg">{syncStatus.message}</p>
+        {syncStatus.kind === 'error' && <button onClick={() => window.location.reload()} className="rounded-lg border px-4 py-2">Erneut versuchen</button>}
       </FullscreenMessage>
     );
   }
@@ -468,6 +468,13 @@ function ArchiveApp({ session, onLogout, onRetryConnection }: { session: Session
 
   return (
     <>
+      <div className={`flex flex-wrap items-center justify-center gap-2 px-3 py-2 text-xs ${syncStatus.kind === 'saved' ? 'bg-green-50 text-green-800' : syncStatus.kind === 'error' ? 'bg-amber-100 text-amber-950' : 'bg-blue-50 text-blue-900'}`} role="status" aria-live="polite">
+        <span>{syncStatus.message}</span>
+        <button onClick={() => void persisterRef.current?.sync()} disabled={syncStatus.kind === 'syncing'} className="shrink-0 rounded border border-current px-2 py-1 disabled:opacity-50">Jetzt abgleichen</button>
+      </div>
+      {syncNotice && <div className="flex items-start justify-between gap-3 bg-amber-100 px-3 py-2 text-sm text-amber-950" role="alert">
+        <span>{syncNotice}</span><button aria-label="Hinweis schließen" onClick={() => setSyncNotice('')}>✕</button>
+      </div>}
       {session.offline && (
         <div className="flex items-center justify-center gap-2 bg-amber-100 px-4 py-1.5 text-xs text-amber-900">
           <WifiOff size={14} /> Offline – Ihre Sammlung ist verfügbar, KI-Funktionen nicht.
@@ -554,13 +561,13 @@ function ArchiveApp({ session, onLogout, onRetryConnection }: { session: Session
           onRegrantFolder={() => void regrantFolder()}
           onUnlinkFolder={() => void unlinkFolder()}
           onExport={async () => {
-            await persister.flush();
+            await persisterRef.current?.flush().catch(() => undefined);
             await exportBackup(projectsRef.current ?? projects);
           }}
           onImportFile={(file) => void importFile(file)}
           onLogout={() => {
             setIsBackupOpen(false);
-            void persister.flush().then(onLogout);
+            void persisterRef.current?.flush().then(onLogout).catch(() => toast.error('Speichern fehlgeschlagen. Bitte vor dem Abmelden JSON exportieren.'));
           }}
           onClose={() => setIsBackupOpen(false)}
         />

@@ -65,7 +65,7 @@ export function LoginScreen({ onSuccess }: { onSuccess: () => void }) {
             {busy && <Loader2 size={16} className="animate-spin" />} Anmelden
           </button>
         </div>
-        <p className="mt-6 text-center text-xs text-slate-400">Geschützter Zugang · Ihre Sammlung bleibt lokal auf diesem Gerät.</p>
+        <p className="mt-6 text-center text-xs text-slate-400">Geschützter Zugang · Dein persönliches Archiv auf deinen Geräten.</p>
       </form>
     </div>
   );

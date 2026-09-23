@@ -61,6 +61,8 @@ export const config = {
   isDev: nodeEnv !== 'production',
   port: readInt('PORT', 3000, 1, 65535),
   host: process.env.HOST?.trim() || '0.0.0.0',
+  dataDir: process.env.DATA_DIR?.trim() || (nodeEnv === 'production' ? '' : './data'),
+  maxProjectBytes: readInt('MAX_PROJECT_MB', 64, 1, 256) * 1024 * 1024,
 
   /** OpenAI – der Schlüssel verlässt den Server nie. */
   openaiApiKey: (process.env.OPENAI_API_KEY ?? '').trim(),
